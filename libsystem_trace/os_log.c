@@ -29,6 +29,10 @@
 #include "libtrace_assert.h"
 #include <asl.h>
 #include <os/log.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 #import <os/object_private.h>
 
 #ifdef os_log_create
@@ -134,6 +138,15 @@ _os_log_impl(void *dso, os_log_t log, os_log_type_t type, const char *format, ui
 	}
 
 	char *decodedBuffer = os_log_decode_buffer(format, buf, size);
+	// OSXER LOG (stderr): mirror decoded messages before the ASL daemon route.
+	const char *mirror = getenv("OSXER_LOG_STDERR");
+	if (!issetugid() && mirror && strcmp(mirror, "1") == 0) {
+		const char *text = decodedBuffer ? decodedBuffer : "(decode failed)";
+		size_t length = strlen(text);
+		fprintf(stderr, "[os_log %s:%s] %s%s", subsystem, category, text,
+		        length && text[length - 1] == '\n' ? "" : "\n");
+		fflush(stderr);
+	}
 	asl_log(get_client(), message, level, "%s", decodedBuffer);
 	asl_release(message);
 	free(decodedBuffer);
